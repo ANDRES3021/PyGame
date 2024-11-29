@@ -2,110 +2,136 @@ import pygame
 import constants
 from character import Character
 from weapon import Weapon
+from items import Item
 
 pygame.init()
+
+class PauseMenu:
+    def __init__(self):
+        self.font = pygame.font.Font("assets/fonts/AtariClassic.ttf", 30)
+
+    def display(self, screen):
+        screen.fill(constants.BG)
+        draw_text("PAUSA", self.font, constants.WIDTH, constants.SCREEM_WIDTH // 2 - 50, constants.SCREEN_HEIGHT // 2 - 50)
+        draw_text("Presiona P para continuar", self.font, constants.WIDTH, constants.SCREEM_WIDTH // 2 - 150, constants.SCREEN_HEIGHT // 2)
+        draw_text("Presiona ESC para salir", self.font, constants.WIDTH, constants.SCREEM_WIDTH // 2 - 150, constants.SCREEN_HEIGHT // 2 + 30)
+        pygame.display.update()
+
+def draw_text(text, font, text_col, x, y):
+    img = font.render(text, True, text_col)
+    screen.blit(img, (x, y))
 
 screen = pygame.display.set_mode((constants.SCREEM_WIDTH, constants.SCREEN_HEIGHT))
 pygame.display.set_caption("Dungeon Crawler")
 
-#create clock for maintaining main rate 
+# Crear reloj para mantener la tasa principal
 clock = pygame.time.Clock()
 
-#define player movement variables
-moving_left = False
-moving_rigth = False
-moving_up = False
-moving_down = False
+# Definir variables de movimiento
+moving = {'left': False, 'right': False, 'up': False, 'down': False}
 
-#define font
+# Definir fuente
 font = pygame.font.Font("assets/fonts/AtariClassic.ttf", 20)
 
-#helped function to scale image
+# Función ayudante para escalar imágenes
 def scale_img(image, scale):
     w = image.get_width()
     h = image.get_height()
-    return pygame.transform.scale(image, (w * scale, h * scale ))
+    return pygame.transform.scale(image, (w * scale, h * scale))
 
-#load weapon images
+# Cargar imágenes de corazón
+heart_empty = scale_img(pygame.image.load("assets/images/items/heart_empty.png").convert_alpha(), constants.ITEM_SCALE)
+heart_half = scale_img(pygame.image.load("assets/images/items/heart_half.png").convert_alpha(), constants.ITEM_SCALE)
+heart_full = scale_img(pygame.image.load("assets/images/items/heart_full.png").convert_alpha(), constants.ITEM_SCALE)
+
+# Cargar imágenes de monedas
+coin_images = [scale_img(pygame.image.load(f"assets/images/items/coin_f{x}.png").convert_alpha(), constants.ITEM_SCALE) for x in range(4)]
+
+# Cargar imagen de poción
+red_potion = scale_img(pygame.image.load("assets/images/items/potion_red.png").convert_alpha(), constants.POTION_SCALE)
+
+# Cargar imágenes de armas
 bow_image = scale_img(pygame.image.load("assets/images/weapons/bow.png").convert_alpha(), constants.WEAPON_SCALE)
 arrow_image = scale_img(pygame.image.load("assets/images/weapons/arrow.png").convert_alpha(), constants.WEAPON_SCALE)
 
-#load character images
+# Cargar imágenes de personajes
 mob_animations = []
 mob_types = ["elf", "imp", "skeleton", "goblin", "muddy", "tiny_zombie", "big_demon"]
-
 animations_types = ["idle", "run"]
+
 for mob in mob_types:
-    #load images
     animation_list = []
     for animation in animations_types:
-        #list temporary list of images
-        temp_list = []
-        for i in range(4):
-            img = pygame.image.load(f"assets/images/characters/{mob}/{animation}/{i}.png").convert_alpha()
-            img = scale_img(img, constants.SCALE)
-            temp_list.append(img)
+        temp_list = [scale_img(pygame.image.load(f"assets/images/characters/{mob}/{animation}/{i}.png").convert_alpha(), constants.SCALE) for i in range(4)]
         animation_list.append(temp_list)
     mob_animations.append(animation_list)
 
-#damage text class
+# Función para mostrar información del juego
+def draw_info():
+    pygame.draw.rect(screen, constants.PANEL, (0, 0, constants.SCREEM_WIDTH, 50))
+    pygame.draw.line(screen, constants.WIDTH, (0, 50), (constants.SCREEM_WIDTH, 50))
+    half_heart_drawn = False
+    for i in range(5):
+        if player.health >= ((i + 1) * 20):
+            screen.blit(heart_full, (10 + i * 50, 0))
+        elif (player.health % 20 > 0) and not half_heart_drawn:
+            screen.blit(heart_half, (10 + i * 50, 0))
+            half_heart_drawn = True
+        else:
+            screen.blit(heart_empty, (10 + i * 50, 0))
+    draw_text(f"PUNTAJE: {player.score}", font, constants.WIDTH, constants.SCREEM_WIDTH - 250, 15)
+
+# Clase para texto de daño
 class DamageText(pygame.sprite.Sprite):
-  def __init__(self, x, y, damage, color):
-    pygame.sprite.Sprite.__init__(self)
-    self.image = font.render(damage, True, color)
-    self.rect = self.image.get_rect()
-    self.rect.center = (x, y)
-    self.counter = 0
+    def __init__(self, x, y, damage, color):
+        super().__init__()
+        self.image = font.render(damage, True, color)
+        self.rect = self.image.get_rect(center=(x, y))
+        self.counter = 0
 
-  def update(self):
-    #move damage text up
-    self.rect.y -= 1
-    #delete the damage text after a few seconds
-    self.counter += 1
-    if self.counter > 30:
-      self.kill()
+    def update(self):
+        self.rect.y -= 1
+        self.counter += 1
+        if self.counter > 30:
+            self.kill()
 
-#create player
+# Crear jugador
 player = Character(100, 100, 100, mob_animations, 0)
-enemy = Character(200, 300, 100,  mob_animations, 1)
-
-#create player`s weapon
+enemy = Character(200, 300, 100, mob_animations, 1)
 bow = Weapon(bow_image, arrow_image)
 
-#create empty enemy list
-enemy_list = []
-enemy_list.append(enemy)
+# Crear lista de enemigos
+enemy_list = [enemy]
 
-#create sprite groups
+# Crear grupos de sprites
 damage_text_group = pygame.sprite.Group()
 arrow_group = pygame.sprite.Group()
+item_group = pygame.sprite.Group()
 
+# Crear objetos de ítem
+score_coin = Item(100, 100, 0, coin_images)
+potion = Item(200, 200, 1, [red_potion])
+item_group.add(potion)
+coin = Item(400, 400, 0, coin_images)
+item_group.add(coin)
 
-
-#main game loop
+# Bucle principal del juego
 run = True
-while run:
+paused = False
+pause_menu = PauseMenu()
 
+while run:
     clock.tick(constants.FPS)
     screen.fill(constants.BG)
 
-    #calculate player movement
-    dx = 0
-    dy = 0
-    if moving_rigth == True:
-        dx = constants.SPPED
-    if moving_left == True:
-        dx = -constants.SPPED
-    if moving_up == True:
-        dy = -constants.SPPED
-    if moving_down == True:
-        dy = constants.SPPED
+    # Calcular movimiento del jugador
+    dx = constants.SPPED * (moving['right'] - moving['left'])
+    dy = constants.SPPED * (moving['down'] - moving['up'])
 
-    print(str(dx) + ", " + str(dy) )
-    #move player
+    # Mover jugador
     player.move(dx, dy)
-    
-    #update player
+
+    # Actualizar enemigos y jugador
     for enemy in enemy_list:
         enemy.update()
     player.update()
@@ -119,44 +145,51 @@ while run:
             damage_text_group.add(damage_text)
 
     damage_text_group.update()
+    item_group.update(player)
 
-    print(arrow_group)
+    # Dibujar elementos en pantalla
     arrow_group.draw(screen)
-
-    #draw player on screen
     for enemy in enemy_list:
         enemy.draw(screen)
     player.draw(screen)
     bow.draw(screen)
-    damage_text_group.draw(screen)
     for arrow in arrow_group:
         arrow.draw(screen)
-    
-    print(enemy.health)
+    damage_text_group.draw(screen)
+    item_group.draw(screen)
+    draw_info()
+    score_coin.draw(screen)
 
-    #event handler
+    # Manejar eventos
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             run = False
         if event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_a:
-                moving_left = True
-            if event.key == pygame.K_d:
-                moving_rigth = True
-            if event.key == pygame.K_w:
-                moving_up = True
-            if event.key == pygame.K_s:
-                moving_down = True
-
+            if event.key == pygame.K_p:
+                paused = not paused
+            if event.key == pygame.K_ESCAPE:
+                run = False
+            if not paused:
+                if event.key == pygame.K_a:
+                    moving['left'] = True
+                if event.key == pygame.K_d:
+                    moving['right'] = True
+                if event.key == pygame.K_w:
+                    moving['up'] = True
+                if event.key == pygame.K_s:
+                    moving['down'] = True
         if event.type == pygame.KEYUP:
             if event.key == pygame.K_a:
-                moving_left = False
+                moving['left'] = False
             if event.key == pygame.K_d:
-                moving_rigth = False
+                moving['right'] = False
             if event.key == pygame.K_w:
-                moving_up = False
+                moving['up'] = False
             if event.key == pygame.K_s:
-                moving_down = False
+                moving['down'] = False
+
+    if paused:
+        pause_menu.display(screen)
 
     pygame.display.update()
 

@@ -8,7 +8,7 @@ pygame.init()
 
 class PauseMenu:
     def __init__(self):
-        self.font = pygame.font.Font("assets/fonts/AtariClassic.ttf", 30)
+        self.font = pygame.font.Font("assets/fonts/AtariClassic.ttf", 10)
 
     def display(self, screen):
         screen.fill(constants.BG)
